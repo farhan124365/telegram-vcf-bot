@@ -1,6 +1,12 @@
 import os
 from telegram import Update
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
+from telegram.ext import (
+    ApplicationBuilder, 
+    CommandHandler, 
+    MessageHandler, 
+    ContextTypes, 
+    filters
+)
 
 TOKEN = os.getenv("7035411312:AAF0XgixqKJ6qjtULAwj7zShTSaGihtNU_0")
 ALLOWED_USERS = [int(i) for i in os.getenv("7531273830").split(",")]
@@ -23,22 +29,22 @@ def txt_to_vcf(txt_content):
     return vcf
 
 def restricted(func):
-    def wrapper(update: Update, context: CallbackContext):
+    async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_id = update.effective_user.id
         if user_id not in ALLOWED_USERS:
-            update.message.reply_text("❌ You are not authorized to use this bot.")
+            await update.message.reply_text("❌ You are not authorized to use this bot.")
             return
-        return func(update, context)
+        return await func(update, context)
     return wrapper
 
 @restricted
-def start(update: Update, context: CallbackContext):
-    update.message.reply_text("Welcome! Send me a TXT file to convert to VCF.")
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Welcome! Send me a TXT file to convert to VCF.")
 
 @restricted
-def handle_document(update: Update, context: CallbackContext):
-    file = update.message.document.get_file()
-    file_path = file.download()
+async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    file = await update.message.document.get_file()
+    file_path = await file.download_to_drive()
 
     with open(file_path, 'r') as f:
         txt_content = f.read()
@@ -49,20 +55,19 @@ def handle_document(update: Update, context: CallbackContext):
     with open(vcf_file_path, 'w') as vcf_file:
         vcf_file.write(vcf_content)
 
-    update.message.reply_document(document=open(vcf_file_path, 'rb'))
+    await update.message.reply_document(document=open(vcf_file_path, 'rb'))
 
     os.remove(file_path)
     os.remove(vcf_file_path)
 
-def main():
-    updater = Updater(TOKEN, use_context=True)
-    dp = updater.dispatcher
+async def main():
+    app = ApplicationBuilder().token(TOKEN).build()
 
-    dp.add_handler(CommandHandler("start", start))
-    dp.add_handler(MessageHandler(Filters.document.mime_type("text/plain"), handle_document))
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(MessageHandler(filters.Document.MimeType("text/plain"), handle_document))
 
-    updater.start_polling()
-    updater.idle()
+    await app.run_polling()
 
 if __name__ == '__main__':
-    main()
+    import asyncio
+    asyncio.run(main())
